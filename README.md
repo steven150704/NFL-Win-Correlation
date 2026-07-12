@@ -81,6 +81,8 @@ The project emphasizes reproducible data analysis, handling real-world messy dat
 - Bar plots comparing correlations across offensive metrics
 - Highlighted the top correlations for clarity
 - Included axis labels and numeric annotations
+- Correlation heatmaps (full 16-stat matrix and single-vs-multi-season comparison) to visualize multicollinearity
+- Regression diagnostics: actual-vs-predicted scatter and coefficient plots with 95% confidence intervals, including a direct single-season vs multi-season comparison
 
 ---
 
@@ -102,9 +104,13 @@ The project emphasizes reproducible data analysis, handling real-world messy dat
 
 ---
 
-## Attempt to Controll for Collinearity
+## Controlling for Collinearity
 
-The findings above are pairwise Pearson correlations, which don't account for offensive stats moving together (e.g. more passing yards tends to come with a higher Score%). A multiple regression on `Score%`, `Yds/PassAtt`, `RushYds`, and `TO%` (R²=0.64) shows that once `Score%` and `Yds/PassAtt` are in the model, `RushYds` and `TO%` add essentially no independent explanatory power (p=0.72 and p=0.98).
+Before running a multivariate model, it's worth checking how correlated the offensive stats are with *each other*, not just with wins. A full correlation matrix across all 16 stats shows several tightly coupled pairs — `PassYds`↔`Pass 1stD` (0.95), `TO`↔`TO%` (0.95), `Score%`↔`ExpectedPoints` (0.91), and notably `Score%`↔`Yds/PassAtt` (0.83), the two strongest single-stat predictors of wins. This is the direct explanation for why the regression below flags a high condition number: several of the "best" predictors aren't independent signals but are different measurements of largely the same thing.
+
+The findings above are also pairwise Pearson correlations, which don't account for offensive stats moving together (e.g. more passing yards tends to come with a higher Score%). A multiple regression on `Score%`, `Yds/PassAtt`, `RushYds`, and `TO%` (R²=0.64) shows that once `Score%` and `Yds/PassAtt` are in the model, `RushYds` and `TO%` add essentially no independent explanatory power (p=0.72 and p=0.98).
+
+Two plots make this concrete: an actual-vs-predicted scatter (R²=0.64) shows the model tracks wins reasonably well, with Cleveland Browns and Pittsburgh Steelers winning more games than their offensive stats alone predict, and Arizona Cardinals and the LA Chargers winning fewer. A coefficient plot with 95% confidence intervals shows `RushYds` and `TO%`'s intervals both straddle zero, visually confirming neither adds significant explanatory power in this single-season model.
 
 A partial-correlation check confirms this directly — controlling for `Score%` collapses the raw correlations substantially:
 
@@ -140,13 +146,42 @@ The top-line finding holds up at scale: **Score%, ExpectedPoints, and Yds/PassAt
 - **Turnovers matter more than the single-season data suggested.** `TO%`, `TO`, and `Int` all show a much stronger negative relationship with wins once the sample grows (roughly -0.13 → -0.43). The 2023-only sample was too small to pick this up reliably.
 - **The penalty correlations were noise.** `Penalties` and `PenYds` looked weakly positive in 2023 alone but flatten to roughly zero across four seasons, consistent with the incidental relationship suspected in the single-season findings — teams that run more plays picking up more penalties along the way, rather than penalties themselves being linked to winning.
 
+### Multi-Season Regression
+
+The same 4-feature regression run on the full 2021–2024 dataset (n=128) tells a different story than the single-season version. R² is nearly identical (0.64 vs 0.643), but statistical significance changes substantially with more data:
+
+| Feature | 2023 only (n=32) | 2021–2024 (n=128) |
+|---|---|---|
+| Score% | not significant (p=0.078) | **significant (p<0.001)** |
+| Yds/PassAtt | not significant (p=0.058) | **significant (p=0.010)** |
+| RushYds | not significant (p=0.722) | not significant (p=0.498) |
+| TO% | not significant (p=0.981) | **significant (p=0.007)**, coef -0.18 |
+
+At n=32, nothing in the model reached conventional significance despite a good R², because the standard errors were too wide. At n=128, `Score%`, `Yds/PassAtt`, and now `TO%` are all significant, independent predictors (only `RushYds` still adds nothing). This is a concrete illustration of why the small single-season sample was a real limitation: a whole predictor (`TO%`) looked irrelevant with n=32 and turned out to matter once there was enough data to detect it. The coefficient comparison plot visualizes this directly. `TO%`'s confidence interval narrows and moves clearly below zero going from the single-season to multi-season model, while `RushYds` stays pinned near zero in both.
+
 ---
 
 ## Limitations
 
 - The single-season findings above are based on n=32 teams — a small sample for ranking 16 predictor variables by correlation strength, which is part of why the multi-season extension was added.
 - The multi-season analysis treats each team-season as an independent observation, which isn't strictly true (the same team across different years isn't fully independent of itself). This is a standard simplification for this kind of project, but worth keeping in mind rather than treating this as 128 truly independent samples.
-- These are still Pearson correlations (and one small OLS regression) rather than a fully controlled multivariate model — the regression addresses collinearity between the top few stats, but wasn't extended to the full 16-variable set or run on the multi-season data.
+- These are still Pearson correlations and a small 4-feature OLS regression rather than a fully controlled multivariate model. Thr regression addresses collinearity between the top few stats, but wasn't extended to the full 16-variable set.
+
+---
+
+## Future Directions
+
+- **Extend the regression to the full feature set.** The current model only uses 4 of the 16 available stats. A regularized approach would handle the correlated predictors better than dropping variables by hand, and could reveal whether any of the excluded stats (e.g. `PassTD`, `Pass 1stD`) add value once penalization accounts for collinearity.
+
+- **Bring in defensive and special teams stats.** This analysis only looks at offensive production. Wins are a function of point differential. Therefore defensive efficiency (points/yards allowed, takeaways forced) and special teams metrics are a natural next dataset to pull from Pro Football Reference and merge in the same way.
+
+- **Validate out-of-sample.** All current results are fit and evaluated on the same data. A proper train/test split (e.g. train on 2021–2023, test on 2024) or leave-one-season-out cross-validation would show whether the model actually predicts future wins or just describes the seasons it was trained on.
+
+- **Model the team-season dependency directly.** The multi-season analysis currently treats all 128 team-seasons as independent, which undercounts uncertainty since the same team appears up to 4 times. A mixed-effects model with a team-level random intercept would account for this properly instead of just flagging it as a limitation.
+
+- **Test for non-linear relationships.** Pearson correlation and OLS both assume linearity. It's plausible some stats matter differently at the extremes (e.g. turnovers might barely matter until a threshold, then hurt sharply). This is something that could be checked with a tree-based model or polynomial terms. 
+
+- **Extend further back in time.** Four seasons (n=128) is still a modest sample for 16 variables. Pulling 2015–2020 in addition would both grow the sample and let the analysis check whether these relationships have shifted as the league has become more pass-heavy over time, while still being relevant to modern play styles.
 
 ---
 
