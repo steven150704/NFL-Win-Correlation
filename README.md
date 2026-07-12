@@ -16,6 +16,19 @@ The project emphasizes reproducible data analysis, handling real-world messy dat
 
 ---
 
+## How to Run
+
+```bash
+git clone https://github.com/steven150704/NFL-Win-Correlation
+cd NFL-Win-Correlation
+pip install -r data/requirements.txt
+jupyter notebook win_analysis.ipynb
+```
+
+Run all cells top to bottom — later cells depend on dataframes and functions defined earlier (e.g. the multi-season regression cells depend on `df_team` and `model` from the single-season section).
+
+---
+
 ## Data Sources
 
 - **Team Offensive Statistics (2021)**  
@@ -53,6 +66,9 @@ The project emphasizes reproducible data analysis, handling real-world messy dat
 - **AFC and NFC Standings (2024)**  
   Team win totals by conference.  
   Source: [Pro Football Reference – 2024 Standings](https://www.pro-football-reference.com/years/2024/)  
+
+> Data in this repo was manually exported from Pro Football Reference for personal, educational analysis — not intended for redistribution as a standalone dataset. See [Pro Football Reference's Terms of Use](https://www.sports-reference.com/data_use.html) for their data-use policies.
+
 ---
 
 ## Methodology
